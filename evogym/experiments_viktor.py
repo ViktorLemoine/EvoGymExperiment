@@ -3,6 +3,7 @@ import evogym
 from evogym import sample_robot
 import numpy as np
 from stable_baselines3 import PPO
+import pickle
 
 # import envs from the envs folder and register them
 import envs
@@ -33,7 +34,7 @@ if __name__ == '__main__':
     
     # make the SimpleWalkingEnv using gym.make and with the robot information
     env = gym.make(
-        'SimpleWalkingEnv-v0',
+        'Walker-v0',
         body=body,
         connections=connections,
         render_mode='human',
@@ -56,3 +57,10 @@ if __name__ == '__main__':
             obs = env.reset()
 
     env.close()
+
+    # Save trained model and robot
+    model.save("walker_ppo_model")
+
+    # Save robot body and connections
+    with open("walker_robot.pkl", "wb") as f:
+        pickle.dump({'body': body, 'connections': connections}, f)
