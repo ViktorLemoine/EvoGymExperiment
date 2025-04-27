@@ -4,63 +4,79 @@ from evogym import sample_robot
 import numpy as np
 from stable_baselines3 import PPO
 import pickle
+import os
 
 # import envs from the envs folder and register them
 import envs
 
-if __name__ == '__main__':
 
-    """
-    # create a random robot
-    body, connections = sample_robot((4,4))
-    print
-    """
-    #create robot myself
-    body = np.array([
-        [1, 1, 1, 1, 1],  # 1: Rigid, 2: Horizontal Actuator
-        [3, 1, 3, 3, 1],  # 0: Empty space
-        [0, 4, 0, 4, 0],
-        [0, 4, 0, 4, 0]
-    ], dtype=np.uint8)
-    body = np.array([
-        [3, 3, 3, 3, 3],  # 1: Rigid, 2: Horizontal Actuator
-        [3, 3, 3, 3, 3],  # 0: Empty space
-        [3, 3, 0, 3, 3],
-        [3, 3, 0, 3, 3]
-    ], dtype=np.uint8)
-    # Get the connections for the robot
-    connections = evogym.envs.get_full_connectivity(body)
+ROBOT_NAME = "walker"
+
+TRAINING_STAGES = [30000, 30000, 40000, 40000]
     
-    
-    # make the SimpleWalkingEnv using gym.make and with the robot information
+ENV_NAME = "ObstacleTraverser-v0"
+
+# Base folder to save models and robots
+BASE_SAVE_FOLDER = f"saved_robots/{ROBOT_NAME}/{ENV_NAME}"
+# ===================================================
+
+body = np.array([
+    [3, 3, 3, 3, 3],  # 1: Rigid, 2: Horizontal Actuator
+    [3, 3, 3, 3, 3],  # 0: Empty space
+    [3, 3, 0, 3, 3],
+    [3, 3, 0, 3, 3]
+], dtype=np.uint8)
+# Get the connections for the robot
+connections = evogym.envs.get_full_connectivity(body)
+
+
+def create_env(body, connections):
+    """Create the EvoGym environment with the given robot."""
     env = gym.make(
-        'Walker-v0',
+        ENV_NAME,
         body=body,
         connections=connections,
         render_mode='human',
         render_options={'verbose': True}
     )
+    return env
 
-    # Create and train a PPO agent
+def save_robot(body, connections, stage_idx):
+    """Save the robot body and connections."""
+    robot_folder = os.path.join(BASE_SAVE_FOLDER, f"stage_{stage_idx+1}", "body")
+    os.makedirs(robot_folder, exist_ok=True)
+    filepath = os.path.join(robot_folder, f"{ROBOT_NAME}_robot.pkl")
+    with open(filepath, "wb") as f:
+        pickle.dump({'body': body, 'connections': connections}, f)
+
+def save_model(model, stage_idx):
+    """Save the model (brain)."""
+    model_folder = os.path.join(BASE_SAVE_FOLDER, f"stage_{stage_idx+1}", "brain")
+    os.makedirs(model_folder, exist_ok=True)
+    filepath = os.path.join(model_folder, f"{ROBOT_NAME}_ppo_model")
+    model.save(filepath)
+
+def train_robot():
+    """Train the robot over multiple stages."""
+    # Get the connections for the robot
+    connections = evogym.envs.get_full_connectivity(body)
+
+    # Create the environment
+    env = create_env(body, connections)
+
+    # Create the model
     model = PPO("MlpPolicy", env, verbose=1)
-    model.learn(total_timesteps=100000)  # Adjust timesteps as needed
 
-    # Evaluate the trained agent
-    obs = env.reset()
-    for i in range(500):
-
-        action, _states = model.predict(obs)  # Use the trained agent's prediction
-        obs, reward, terminated, truncated, info = env.step(action)
-        env.render()
-
-        if terminated or truncated:
-            obs = env.reset()
+    # Training over multiple stages
+    for stage_idx, steps in enumerate(TRAINING_STAGES):
+        print(f"\n========== Training Stage {stage_idx+1} | {steps} steps ==========")
+        model.learn(total_timesteps=steps)
+        save_model(model, stage_idx)
+        save_robot(body, connections, stage_idx)
+        print(f"Stage {stage_idx+1} completed and saved.\n")
 
     env.close()
+    print("\nTraining complete!")
 
-    # Save trained model and robot
-    model.save("walker_ppo_model")
-
-    # Save robot body and connections
-    with open("walker_robot.pkl", "wb") as f:
-        pickle.dump({'body': body, 'connections': connections}, f)
+if __name__ == '__main__':
+    train_robot()
